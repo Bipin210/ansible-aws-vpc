@@ -1,0 +1,78 @@
+- name: This play book for creating peering connection
+  hosts: local
+  connection: local
+  gather_facts: False
+  vars_files:
+    - secret.yml
+    - variable.yml
+  tasks:
+  - name: create VPC
+    ec2_vpc_net:
+      name: "{{ vpc_name[0] }}"
+      cidr_block: "{{ vpc_cidr[0] }}"
+      region: "{{ region[0] }}"
+      state: absent
+      aws_access_key: "{{ aws_access_key_id }}"
+      aws_secret_key: "{{ aws_secret_key_id }}"
+    register: ec2_vpc_net_result
+
+  - name: create subnet to the vpc
+    ec2_vpc_subnet:
+      aws_access_key: "{{ aws_access_key_id }}"
+      aws_secret_key: "{{ aws_secret_key_id }}"
+      vpc_id: "{{ ec2_vpc_net_result.vpc.id }}"
+      region: "{{ region[0] }}"
+      cidr: "{{ subnet_cidr[0] }}"
+      state: absent
+      map_public: yes
+      resource_tags:
+        Name: "{{ subnet_name[0] }}"
+    register: subnet
+                   
+  - name: create IGW
+    ec2_vpc_igw:   
+      vpc_id: "{{ ec2_vpc_net_result.vpc.id }}"
+      region: "{{ region[0] }}"
+      aws_access_key: "{{ aws_access_key_id }}"
+      aws_secret_key: "{{ aws_secret_key_id }}"
+      state: absent
+      tags:        
+        Name: "{{ igw_name }}"
+    ignore_errors: yes
+
+  - name: Route IGW
+    ec2_vpc_route_table:
+     vpc_id: "{{ ec2_vpc_net_result.vpc.id }}"
+     state: absent
+     region: "{{ region[0] }}"
+     aws_access_key: "{{ aws_access_key_id }}"
+     aws_secret_key: "{{ aws_secret_key_id }}"
+     subnets:
+       - "{{ subnet.subnet.id }}"
+     routes:
+       - dest: 0.0.0.0/0
+         gateway_id: "{{ igw.gateway_id  }}"
+     tags:
+       Name: gateway1
+    ignore_errors: yes
+# update the CIDR address in the SSH port section.
+ 
+  - name: Create Security Group
+    ec2_group:
+      name: Web DMZ
+      description: DMZ Security Group
+      vpc_id: "{{ ec2_vpc_net_result.vpc.id }}"
+      region: "{{ region[0] }}"
+      aws_access_key: "{{ aws_access_key_id }}"
+      aws_secret_key: "{{ aws_secret_key_id }}"
+      absent: yes
+    ignore_errors: yes
+
+   
+  - name: create key pair using key_material obtained using 'file' lookup plugin
+    amazon.aws.ec2_key:
+      name: my_keypair
+      region: "{{ region[0] }}"
+      state: absent
+
+ 
